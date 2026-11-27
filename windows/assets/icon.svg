@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="orb" cx="34%" cy="28%" r="78%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.24" stop-color="#67e8f9"/>
+      <stop offset="0.62" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#312e81"/>
+    </radialGradient>
+    <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="#11141c"/>
+  <circle cx="128" cy="128" r="82" fill="url(#orb)" filter="url(#shadow)"/>
+  <circle cx="98" cy="91" r="21" fill="#ffffff" opacity="0.58"/>
+</svg>
