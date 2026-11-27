@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; connect-src 'self' https://api.openai.com; media-src blob:; style-src 'self' 'unsafe-inline'"
+		/>
+		<title>Bol</title>
+		<link rel="stylesheet" href="styles.css" />
+	</head>
+	<body>
+		<main id="bar">
+			<section id="conversation">
+				<div id="status-row">
+					<div id="orb" aria-hidden="true"></div>
+					<div>
+						<div id="status">Starting Bol…</div>
+						<div id="detail">Ctrl+J anywhere to talk</div>
+					</div>
+					<button id="settings-button" class="icon-button" title="Settings" aria-label="Settings">…</button>
+					<button id="close-button" class="icon-button" title="Hide" aria-label="Hide">×</button>
+				</div>
+				<div id="reply" class="empty">Say what you need. Enter sends, Esc stops.</div>
+				<div id="composer">
+					<button id="mic-button" title="Talk" aria-label="Talk">
+						<svg
+							viewBox="0 0 24 24"
+							width="20"
+							height="20"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<rect x="9" y="3" width="6" height="11" rx="3"></rect>
+							<path d="M5 11a7 7 0 0 0 14 0"></path>
+							<path d="M12 18v3"></path>
+						</svg>
+					</button>
+					<input
+						id="text-input"
+						type="text"
+						autocomplete="off"
+						spellcheck="false"
+						placeholder="Type or talk to Bol…"
+					/>
+					<button id="send-button" title="Send" aria-label="Send">↵</button>
+				</div>
+			</section>
+		</main>
+
+		<dialog id="settings-dialog">
+			<form method="dialog" id="settings-form">
+				<header>
+					<h1>Bol settings</h1>
+					<button value="cancel" class="icon-button" aria-label="Close settings">×</button>
+				</header>
+				<label>
+					OpenAI API key <small>used only for speech recognition</small>
+					<input id="setting-openai" type="password" autocomplete="off" placeholder="sk-…" />
+				</label>
+				<div class="grid">
+					<label>
+						Model
+						<select id="setting-model">
+							<option value="claude-opus-5-5">Claude Opus 5.5</option>
+							<option value="claude-fable-5-2">Claude Fable 5.2</option>
+						</select>
+					</label>
+					<label>
+						Effort
+						<select id="setting-effort">
+							<option value="medium">Medium</option>
+							<option value="high">High</option>
+							<option value="xhigh">Extra high</option>
+							<option value="max">Max</option>
+						</select>
+					</label>
+				</div>
+				<label>
+					Working folder <small>blank uses Bol's own workspace</small>
+					<input id="setting-cwd" type="text" placeholder="C:\\Users\\you\\Projects" />
+				</label>
+				<div class="grid">
+					<label>
+						Hotkey
+						<input id="setting-hotkey" type="text" placeholder="Control+J" />
+					</label>
+					<label>
+						Screen access
+						<select id="setting-screen">
+							<option value="auto">Auto</option>
+							<option value="off">Off</option>
+						</select>
+					</label>
+				</div>
+				<label class="check"><input id="setting-chrome" type="checkbox" /> Enable Claude in Chrome</label>
+				<label class="check"><input id="setting-speak" type="checkbox" /> Speak replies</label>
+				<label class="check"><input id="setting-login" type="checkbox" /> Start Bol when Windows starts</label>
+				<label class="check"><input id="setting-silent" type="checkbox" /> Silent mode</label>
+				<footer>
+					<button type="button" id="reset-button">New conversation</button>
+					<button type="submit" id="save-button">Save</button>
+				</footer>
+			</form>
+		</dialog>
+		<script src="renderer.js"></script>
+	</body>
+</html>

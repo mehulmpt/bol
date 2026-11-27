@@ -1,0 +1,29 @@
+name: Windows build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: ./build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bol-windows
+          path: build/windows/installer/*.exe
+          if-no-files-found: error
+          retention-days: 14

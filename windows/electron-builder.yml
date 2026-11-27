@@ -1,0 +1,29 @@
+appId: com.agentbol.bol
+productName: Bol
+copyright: Copyright © 2026 Bol contributors
+directories:
+  output: ../build/windows/installer
+  buildResources: assets
+files:
+  - src/**/*
+  - package.json
+extraResources:
+  - from: ../build/windows/brain
+    to: brain
+    filter:
+      - bol-brain.exe
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: Bol-Windows-${version}-${arch}.${ext}
+  icon: assets/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Bol
+portable:
+  artifactName: Bol-Windows-${version}-portable.${ext}
+publish: null

@@ -3,6 +3,7 @@
 // browser. Also answers servers that ask for a browser sign-in mid-call (URL elicitation).
 
 import type { OnElicitation, Query } from '@anthropic-ai/claude-agent-sdk'
+import { IS_WINDOWS } from './constants'
 import { emit, log } from './protocol'
 import { sh } from './utils'
 
@@ -38,7 +39,14 @@ export function findUrl(value: unknown): string | null {
 /** Opens a sign-in page in the default browser. Only web pages: never a file or another app's URL scheme. */
 async function openInBrowser({ url }: { url: string }): Promise<boolean> {
 	if (!/^https?:\/\//.test(url)) return false
-	await sh({ cmd: ['open', url] })
+	if (IS_WINDOWS) {
+		const escaped = url.replaceAll("'", "''")
+		await sh({
+			cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${escaped}'`],
+		})
+	} else {
+		await sh({ cmd: ['open', url] })
+	}
 	return true
 }
 

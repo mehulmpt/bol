@@ -1,0 +1,18 @@
+{
+	"name": "bol-windows",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Bol for Windows",
+	"author": "Bol contributors",
+	"type": "module",
+	"main": "src/main.js",
+	"scripts": {
+		"start": "electron .",
+		"pack": "electron-builder --win --x64",
+		"dist": "electron-builder --win --x64 --config electron-builder.yml"
+	},
+	"devDependencies": {
+		"electron": "42.11.18",
+		"electron-builder": "26.18.1"
+	}
+}

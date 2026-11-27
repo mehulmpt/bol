@@ -8,9 +8,12 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk'
 import { readFile, unlink } from 'node:fs/promises'
 import { z } from 'zod'
+import { IS_WINDOWS, PLATFORM_NAME } from './constants'
 import { emit } from './protocol'
 
 const CONTROL_TIMEOUT_MS = 120_000
+const MODIFIER_EXAMPLE = IS_WINDOWS ? 'ctrl+shift' : 'cmd+shift'
+const KEY_EXAMPLES = IS_WINDOWS ? 'ctrl+a, ctrl+shift+tab or alt+f4' : 'cmd+a, ctrl+shift+tab or cmd+q'
 
 type ControlResult = { text: string; isError: boolean; images: string[] }
 
@@ -23,13 +26,13 @@ export function resolveControl({ id, ...result }: { id: string } & ControlResult
 	resolve?.(result)
 }
 
-/** Has the app perform one action and returns its result as tool content (text plus any screenshots). */
-async function control({ action }: { action: Record<string, unknown> }) {
+/** Has the app perform one action and returns its raw text plus temporary screenshot paths. */
+export async function requestControl({ action }: { action: Record<string, unknown> }): Promise<ControlResult> {
 	const id = `c${++controlSeq}`
-	const result = await new Promise<ControlResult>((resolve) => {
+	return new Promise<ControlResult>((resolve) => {
 		const timer = setTimeout(() => {
 			pendingControls.delete(id)
-			resolve({ text: 'The Mac did not respond in time.', isError: true, images: [] })
+			resolve({ text: `The ${PLATFORM_NAME} did not respond in time.`, isError: true, images: [] })
 		}, CONTROL_TIMEOUT_MS)
 		pendingControls.set(id, (r) => {
 			clearTimeout(timer)
@@ -37,6 +40,11 @@ async function control({ action }: { action: Record<string, unknown> }) {
 		})
 		emit({ type: 'control', id, action })
 	})
+}
+
+/** Has the app perform one action and returns its result as tool content (text plus any screenshots). */
+async function control({ action }: { action: Record<string, unknown> }) {
+	const result = await requestControl({ action })
 	const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
 		{ type: 'text', text: result.text },
 	]
@@ -49,8 +57,11 @@ async function control({ action }: { action: Record<string, unknown> }) {
 }
 
 const coordinate = z.tuple([z.number(), z.number()]).describe('[x, y] in pixels of the latest screenshot')
-const modifiers = z.string().optional().describe('Modifier keys to hold during the click, e.g. "shift" or "cmd+shift"')
-const keys = z.string().describe('A key or combination, e.g. "return", "escape", "cmd+a", "ctrl+shift+tab"')
+const modifiers = z
+	.string()
+	.optional()
+	.describe(`Modifier keys to hold during the click, e.g. "shift" or "${MODIFIER_EXAMPLE}"`)
+const keys = z.string().describe(`A key or combination, e.g. "return", "escape", ${KEY_EXAMPLES}`)
 
 const clickShape = { coordinate, text: modifiers }
 
@@ -180,7 +191,7 @@ export const controlTools = [
 	),
 	tool(
 		'key',
-		'Press a key or key combination, including system shortcuts such as cmd+tab or cmd+q.',
+		`Press a key or key combination, including system shortcuts such as ${KEY_EXAMPLES}.`,
 		{ text: keys, repeat: z.number().int().optional().describe('How many times to press it (default 1)') },
 		({ text, repeat }) => control({ action: { name: 'key', text, repeat } }),
 	),
@@ -195,8 +206,16 @@ export const controlTools = [
 	),
 	tool(
 		'open_application',
-		'Open an app, or bring it to the front if it is already running.',
-		{ app: z.string().describe('The app name, e.g. "Notes", or its bundle identifier') },
+		`Open an app, or bring it to the front if it is already running.`,
+		{
+			app: z
+				.string()
+				.describe(
+					IS_WINDOWS
+						? 'The app or executable name, e.g. "chrome" or "notepad"'
+						: 'The app name, e.g. "Notes", or its bundle identifier',
+				),
+		},
 		({ app }) => control({ action: { name: 'open_application', app } }),
 	),
 	tool(
