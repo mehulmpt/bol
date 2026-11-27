@@ -11,8 +11,28 @@ Mac, then tells you when it's done. Runs on your Claude subscription. [agentbol.
 
 macOS 13+, Apple silicon or Intel. Signed, notarized, and it updates itself when it's idle.
 
+## Windows
+
+A Windows port lives in `windows/`: an Electron tray app and voice bar driving the same Claude brain. It uses
+**Ctrl+J**, Windows speech synthesis, OpenAI speech recognition, screen capture, keyboard/pointer control, and the
+same JSON-lines brain protocol as the Mac app.
+
+Build it on Windows with Bun and PowerShell:
+
+```powershell
+.\build-windows.ps1          # NSIS installer and portable exe in build\windows\installer
+.\build-windows.ps1 -SkipInstaller  # only compile build\windows\brain\bol-brain.exe
+```
+
+The `Windows build` workflow produces the installer as a build artifact on Windows runners.
+
+The Windows port is newer than the Mac app. It does not yet include the full onboarding flow, Threads window,
+MCP settings UI, login-item integration, or automatic updates. Voice input needs an OpenAI API key in Settings;
+Claude itself still uses the signed-in Claude Code subscription. Builds are unsigned unless electron-builder is
+configured with a Windows code-signing certificate.
+
 > [!WARNING]
-> Bol runs Claude Code with **permission checks off**: it acts on your Mac without asking first.
+> Bol runs Claude Code with **permission checks off**: it acts on your computer without asking first.
 
 > [!NOTE]
 > Listening and plan usage use Anthropic endpoints that aren't public APIs (the ones behind Claude Code's
