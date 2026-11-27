@@ -19,6 +19,7 @@ const fields = {
 	screenAccess: document.getElementById('setting-screen'),
 	isChromeEnabled: document.getElementById('setting-chrome'),
 	speakReplies: document.getElementById('setting-speak'),
+	openAtLogin: document.getElementById('setting-login'),
 	isSilentMode: document.getElementById('setting-silent'),
 }
 
@@ -161,6 +162,7 @@ function fillSettings() {
 	fields.screenAccess.value = config.screenAccess
 	fields.isChromeEnabled.checked = Boolean(config.isChromeEnabled)
 	fields.speakReplies.checked = Boolean(config.speakReplies)
+	fields.openAtLogin.checked = Boolean(config.openAtLogin)
 	fields.isSilentMode.checked = Boolean(config.isSilentMode)
 }
 
@@ -180,6 +182,7 @@ async function saveSettings(event) {
 		screenAccess: fields.screenAccess.value,
 		isChromeEnabled: fields.isChromeEnabled.checked,
 		speakReplies: fields.speakReplies.checked,
+		openAtLogin: fields.openAtLogin.checked,
 		isSilentMode: fields.isSilentMode.checked,
 	}
 	config = await window.bol.saveSettings(next)

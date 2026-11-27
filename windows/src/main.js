@@ -38,6 +38,7 @@ const defaultConfig = {
 	screenAccess: 'auto',
 	isSilentMode: false,
 	speakReplies: true,
+	openAtLogin: true,
 	voice: '',
 }
 
@@ -59,6 +60,11 @@ async function loadConfig() {
 async function saveConfig() {
 	await fs.mkdir(bolDir, { recursive: true })
 	await fs.writeFile(configFile, JSON.stringify(config, null, 2), 'utf8')
+}
+
+function applyLoginItem() {
+	if (!isWindows || !isPackaged) return
+	app.setLoginItemSettings({ openAtLogin: Boolean(config.openAtLogin), openAsHidden: true })
 }
 
 function sendToWindow(type, data = {}) {
@@ -480,13 +486,11 @@ async function performMouseAction(action) {
 }
 
 function displayChoices() {
-	return screen
-		.getAllDisplays()
-		.map((display) => ({
-			id: String(display.id),
-			label: display.label || `Display ${display.id}`,
-			bounds: display.bounds,
-		}))
+	return screen.getAllDisplays().map((display) => ({
+		id: String(display.id),
+		label: display.label || `Display ${display.id}`,
+		bounds: display.bounds,
+	}))
 }
 
 function pickDisplay() {
@@ -672,6 +676,7 @@ function wireIpc() {
 		config = { ...config, ...next }
 		await saveConfig()
 		if (hotkeyChanged) registerHotkey()
+		applyLoginItem()
 		if (brainSettingsChanged) brain?.restart()
 		return config
 	})
@@ -694,6 +699,7 @@ if (!hasLock) {
 	app.on('second-instance', showVoiceWindow)
 	app.whenReady().then(async () => {
 		await loadConfig()
+		applyLoginItem()
 		createVoiceWindow()
 		createTray()
 		registerHotkey()
