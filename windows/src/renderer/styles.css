@@ -167,26 +167,8 @@ body.error #orb {
 }
 
 #mic-button {
-	position: relative;
-	border-radius: 50%;
-}
-
-#mic-button span {
-	display: block;
-	width: 12px;
-	height: 18px;
-	margin: 10px auto 0;
-	border: 2px solid currentColor;
-	border-radius: 8px;
-}
-
-#mic-button span::after {
-	content: '';
-	display: block;
-	width: 16px;
-	height: 8px;
-	margin: 15px 0 0 -4px;
-	border-bottom: 2px solid currentColor;
+	display: grid;
+	place-items: center;
 	border-radius: 50%;
 }
 
