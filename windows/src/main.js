@@ -64,7 +64,7 @@ async function saveConfig() {
 
 function applyLoginItem() {
 	if (!isWindows || !isPackaged) return
-	app.setLoginItemSettings({ openAtLogin: Boolean(config.openAtLogin), openAsHidden: true })
+	app.setLoginItemSettings({ openAtLogin: Boolean(config.openAtLogin) })
 }
 
 function sendToWindow(type, data = {}) {
@@ -567,10 +567,10 @@ async function performControlAction(action) {
 		case 'scroll':
 			return { text: await performMouseAction(action), images: [] }
 		case 'type': {
-			const previous = clipboard.readText()
-			clipboard.writeText(String(action.text ?? ''))
+			const previous = await clipboard.readText()
+			await clipboard.writeText(String(action.text ?? ''))
 			await pressKeys('ctrl+v')
-			setTimeout(() => clipboard.writeText(previous), 500)
+			setTimeout(() => void clipboard.writeText(previous), 500)
 			return { text: 'Typed.', images: [] }
 		}
 		case 'key':
@@ -605,9 +605,9 @@ async function performControlAction(action) {
 				images: [],
 			}
 		case 'read_clipboard':
-			return { text: clipboard.readText(), images: [] }
+			return { text: await clipboard.readText(), images: [] }
 		case 'write_clipboard':
-			clipboard.writeText(String(action.text ?? ''))
+			await clipboard.writeText(String(action.text ?? ''))
 			return { text: 'Clipboard updated.', images: [] }
 		case 'wait':
 			await new Promise((resolve) => setTimeout(resolve, Math.min(30, Number(action.duration ?? 1)) * 1000))
@@ -716,7 +716,7 @@ if (!hasLock) {
 		globalShortcut.unregisterAll()
 		brain?.stop()
 	})
-	app.on('window-all-closed', (event) => {
-		event.preventDefault?.()
+	app.on('window-all-closed', () => {
+		// Bol lives in the system tray.
 	})
 }
