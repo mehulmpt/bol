@@ -5,12 +5,95 @@ import { readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
-import { SCREEN_MODE } from './constants'
+import { IS_WINDOWS, PLATFORM_NAME, SCREEN_MODE } from './constants'
 import { controlTools } from './control'
 import { sh } from './utils'
 
-/** Frontmost app, window title and (for browsers) the current URL. */
+const WINDOWS_FRONTMOST_SCRIPT = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class BolWindow {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+}
+"@
+$hwnd = [BolWindow]::GetForegroundWindow()
+$builder = New-Object System.Text.StringBuilder 1024
+[void][BolWindow]::GetWindowText($hwnd, $builder, $builder.Capacity)
+$targetPid = 0
+[void][BolWindow]::GetWindowThreadProcessId($hwnd, [ref]$targetPid)
+$app = ""
+try { $app = (Get-Process -Id $targetPid -ErrorAction Stop).ProcessName } catch {}
+$rect = New-Object BolWindow+RECT
+[void][BolWindow]::GetWindowRect($hwnd, [ref]$rect)
+$width = $rect.Right - $rect.Left
+$height = $rect.Bottom - $rect.Top
+Write-Output $app
+Write-Output $builder.ToString()
+Write-Output "$($rect.Left),$($rect.Top),$width,$height"
+`
+
+function windowsCaptureScript({ file, bounds }: { file: string; bounds: number[] | null }) {
+	const escaped = file.replaceAll("'", "''")
+	const source =
+		bounds == null
+			? `
+Add-Type -AssemblyName System.Windows.Forms
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$x = $screen.Left
+$y = $screen.Top
+$width = $screen.Width
+$height = $screen.Height`
+			: `
+$x = ${Math.round(bounds[0] ?? 0)}
+$y = ${Math.round(bounds[1] ?? 0)}
+$width = ${Math.max(1, Math.round(bounds[2] ?? 1))}
+$height = ${Math.max(1, Math.round(bounds[3] ?? 1))}`
+	return `
+Add-Type -AssemblyName System.Drawing
+${source}
+$bitmap = New-Object System.Drawing.Bitmap($width, $height)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.CopyFromScreen($x, $y, 0, 0, $bitmap.Size)
+if ($width -gt 1600) {
+  $scale = 1600 / $width
+  $targetWidth = 1600
+  $targetHeight = [Math]::Max(1, [int]($height * $scale))
+  $resized = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight)
+  $resizedGraphics = [System.Drawing.Graphics]::FromImage($resized)
+  $resizedGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $resizedGraphics.DrawImage($bitmap, 0, 0, $targetWidth, $targetHeight)
+  $graphics.Dispose()
+  $bitmap.Dispose()
+  $bitmap = $resized
+} else {
+  $graphics.Dispose()
+}
+$bitmap.Save('${escaped}', [System.Drawing.Imaging.ImageFormat]::Jpeg)
+$bitmap.Dispose()
+`
+}
+
+/** Frontmost app, window title and (for browsers on macOS) the current URL. */
 async function frontmostContext(): Promise<{ app: string; title: string; url: string; bounds: number[] | null }> {
+	if (IS_WINDOWS) {
+		const info = await sh({
+			cmd: ['powershell', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_FRONTMOST_SCRIPT],
+		})
+		const [app = '', title = '', b = ''] = info.split('\n')
+		const nums = b.trim().split(',').map(Number)
+		return {
+			app: app.trim(),
+			title: title.trim(),
+			url: '',
+			bounds: nums.length === 4 && nums.every((n) => Number.isFinite(n)) ? nums : null,
+		}
+	}
 	const info = await sh({
 		cmd: [
 			'osascript',
@@ -53,7 +136,7 @@ async function frontmostContext(): Promise<{ app: string; title: string; url: st
 const makeLookAtScreen = ({ onScreen }: { onScreen: (event: { reason: string }) => void }) =>
 	tool(
 		'look_at_screen',
-		'See what the user is looking at on their Mac right now: returns a screenshot plus the frontmost app, window title and browser URL. ' +
+		`See what the user is looking at on their ${PLATFORM_NAME} right now: returns a screenshot plus the frontmost app, window title and browser URL when available. ` +
 			"Use it when the request refers to something on screen or needs visual context. Prefer scope 'window' (the frontmost window); use 'screen' for the whole display.",
 		{
 			reason: z.string().describe('A few words on why you need to look, shown to the user'),
@@ -63,13 +146,26 @@ const makeLookAtScreen = ({ onScreen }: { onScreen: (event: { reason: string }) 
 			onScreen({ reason })
 			const ctx = await frontmostContext()
 			const file = join(tmpdir(), `bol-screen-${Date.now()}.jpg`)
-			const args = ['screencapture', '-x', '-t', 'jpg']
-			if ((scope ?? 'window') === 'window' && ctx.bounds != null) args.push('-R', ctx.bounds.join(','))
-			args.push(file)
-			await sh({ cmd: args })
+			if (IS_WINDOWS) {
+				const crop = (scope ?? 'window') === 'window' ? ctx.bounds : null
+				await sh({
+					cmd: [
+						'powershell',
+						'-NoProfile',
+						'-NonInteractive',
+						'-Command',
+						windowsCaptureScript({ file, bounds: crop }),
+					],
+				})
+			} else {
+				const args = ['screencapture', '-x', '-t', 'jpg']
+				if ((scope ?? 'window') === 'window' && ctx.bounds != null) args.push('-R', ctx.bounds.join(','))
+				args.push(file)
+				await sh({ cmd: args })
+			}
 			let image = ''
 			try {
-				await sh({ cmd: ['sips', '-Z', '1600', file] }) // keep it readable but small
+				if (!IS_WINDOWS) await sh({ cmd: ['sips', '-Z', '1600', file] }) // keep it readable but small
 				image = (await readFile(file)).toString('base64')
 			} catch {}
 			await unlink(file).catch(() => {})
@@ -82,7 +178,9 @@ const makeLookAtScreen = ({ onScreen }: { onScreen: (event: { reason: string }) 
 					content: [
 						{
 							type: 'text',
-							text: text + '\n(Screenshot failed: Bol may need Screen Recording permission.)',
+							text:
+								text +
+								`\n(Screenshot failed${IS_WINDOWS ? '' : ': Bol may need Screen Recording permission'}.)`,
 						},
 					],
 					isError: true,
