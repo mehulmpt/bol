@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { IS_WINDOWS, PLATFORM_NAME, SCREEN_MODE } from './constants'
-import { controlTools } from './control'
+import { controlTools, requestControl } from './control'
 import { sh } from './utils'
 
 const WINDOWS_FRONTMOST_SCRIPT = `
@@ -37,47 +37,6 @@ Write-Output $app
 Write-Output $builder.ToString()
 Write-Output "$($rect.Left),$($rect.Top),$width,$height"
 `
-
-function windowsCaptureScript({ file, bounds }: { file: string; bounds: number[] | null }) {
-	const escaped = file.replaceAll("'", "''")
-	const source =
-		bounds == null
-			? `
-Add-Type -AssemblyName System.Windows.Forms
-$screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-$x = $screen.Left
-$y = $screen.Top
-$width = $screen.Width
-$height = $screen.Height`
-			: `
-$x = ${Math.round(bounds[0] ?? 0)}
-$y = ${Math.round(bounds[1] ?? 0)}
-$width = ${Math.max(1, Math.round(bounds[2] ?? 1))}
-$height = ${Math.max(1, Math.round(bounds[3] ?? 1))}`
-	return `
-Add-Type -AssemblyName System.Drawing
-${source}
-$bitmap = New-Object System.Drawing.Bitmap($width, $height)
-$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$graphics.CopyFromScreen($x, $y, 0, 0, $bitmap.Size)
-if ($width -gt 1600) {
-  $scale = 1600 / $width
-  $targetWidth = 1600
-  $targetHeight = [Math]::Max(1, [int]($height * $scale))
-  $resized = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight)
-  $resizedGraphics = [System.Drawing.Graphics]::FromImage($resized)
-  $resizedGraphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-  $resizedGraphics.DrawImage($bitmap, 0, 0, $targetWidth, $targetHeight)
-  $graphics.Dispose()
-  $bitmap.Dispose()
-  $bitmap = $resized
-} else {
-  $graphics.Dispose()
-}
-$bitmap.Save('${escaped}', [System.Drawing.Imaging.ImageFormat]::Jpeg)
-$bitmap.Dispose()
-`
-}
 
 /** Frontmost app, window title and (for browsers on macOS) the current URL. */
 async function frontmostContext(): Promise<{ app: string; title: string; url: string; bounds: number[] | null }> {
@@ -145,30 +104,30 @@ const makeLookAtScreen = ({ onScreen }: { onScreen: (event: { reason: string }) 
 		async ({ reason, scope }) => {
 			onScreen({ reason })
 			const ctx = await frontmostContext()
-			const file = join(tmpdir(), `bol-screen-${Date.now()}.jpg`)
+			let image = ''
 			if (IS_WINDOWS) {
+				// The Windows shell owns capture so its click coordinate mapping uses this exact image.
 				const crop = (scope ?? 'window') === 'window' ? ctx.bounds : null
-				await sh({
-					cmd: [
-						'powershell',
-						'-NoProfile',
-						'-NonInteractive',
-						'-Command',
-						windowsCaptureScript({ file, bounds: crop }),
-					],
-				})
+				const capture = await requestControl({ action: { name: 'screenshot', screenRegion: crop } })
+				const path = capture.images[0]
+				if (!capture.isError && path != null) {
+					image = await readFile(path)
+						.then((data) => data.toString('base64'))
+						.catch(() => '')
+					await unlink(path).catch(() => {})
+				}
 			} else {
+				const file = join(tmpdir(), `bol-screen-${Date.now()}.jpg`)
 				const args = ['screencapture', '-x', '-t', 'jpg']
 				if ((scope ?? 'window') === 'window' && ctx.bounds != null) args.push('-R', ctx.bounds.join(','))
 				args.push(file)
 				await sh({ cmd: args })
+				try {
+					await sh({ cmd: ['sips', '-Z', '1600', file] }) // keep it readable but small
+					image = (await readFile(file)).toString('base64')
+				} catch {}
+				await unlink(file).catch(() => {})
 			}
-			let image = ''
-			try {
-				if (!IS_WINDOWS) await sh({ cmd: ['sips', '-Z', '1600', file] }) // keep it readable but small
-				image = (await readFile(file)).toString('base64')
-			} catch {}
-			await unlink(file).catch(() => {})
 			const lines = [`Frontmost app: ${ctx.app === '' ? 'unknown' : ctx.app}`]
 			if (ctx.title !== '') lines.push(`Window: ${ctx.title}`)
 			if (ctx.url !== '') lines.push(`URL: ${ctx.url}`)

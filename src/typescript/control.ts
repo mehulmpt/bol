@@ -26,10 +26,10 @@ export function resolveControl({ id, ...result }: { id: string } & ControlResult
 	resolve?.(result)
 }
 
-/** Has the app perform one action and returns its result as tool content (text plus any screenshots). */
-async function control({ action }: { action: Record<string, unknown> }) {
+/** Has the app perform one action and returns its raw text plus temporary screenshot paths. */
+export async function requestControl({ action }: { action: Record<string, unknown> }): Promise<ControlResult> {
 	const id = `c${++controlSeq}`
-	const result = await new Promise<ControlResult>((resolve) => {
+	return new Promise<ControlResult>((resolve) => {
 		const timer = setTimeout(() => {
 			pendingControls.delete(id)
 			resolve({ text: `The ${PLATFORM_NAME} did not respond in time.`, isError: true, images: [] })
@@ -40,6 +40,11 @@ async function control({ action }: { action: Record<string, unknown> }) {
 		})
 		emit({ type: 'control', id, action })
 	})
+}
+
+/** Has the app perform one action and returns its result as tool content (text plus any screenshots). */
+async function control({ action }: { action: Record<string, unknown> }) {
+	const result = await requestControl({ action })
 	const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
 		{ type: 'text', text: result.text },
 	]

@@ -92,6 +92,9 @@ function createVoiceWindow() {
 		},
 	})
 	voiceWindow.loadFile(path.join(dirname, 'renderer/index.html'))
+	voiceWindow.webContents.once('did-finish-load', () => {
+		if (voiceWindow?.isVisible()) sendToWindow('shown')
+	})
 	voiceWindow.on('blur', () => {
 		if (!voiceWindow.webContents.isDevToolsOpened()) hideVoiceWindow()
 	})
@@ -493,8 +496,14 @@ function displayChoices() {
 	}))
 }
 
-function pickDisplay() {
+function pickDisplay(screenRegion = null) {
 	const displays = screen.getAllDisplays()
+	if (screenRegion != null) {
+		return screen.getDisplayNearestPoint({
+			x: Math.round(screenRegion[0] + screenRegion[2] / 2),
+			y: Math.round(screenRegion[1] + screenRegion[3] / 2),
+		})
+	}
 	if (selectedDisplay !== 'auto') {
 		const selected = displays.find(
 			(display) => String(display.id) === selectedDisplay || display.label === selectedDisplay,
@@ -504,8 +513,20 @@ function pickDisplay() {
 	return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) ?? screen.getPrimaryDisplay()
 }
 
-async function captureScreen({ region = null } = {}) {
-	const display = pickDisplay()
+function cropImage(image, crop) {
+	const size = image.getSize()
+	const x = Math.max(0, Math.min(size.width - 1, Math.round(crop.x)))
+	const y = Math.max(0, Math.min(size.height - 1, Math.round(crop.y)))
+	return image.crop({
+		x,
+		y,
+		width: Math.max(1, Math.min(size.width - x, Math.round(crop.width))),
+		height: Math.max(1, Math.min(size.height - y, Math.round(crop.height))),
+	})
+}
+
+async function captureScreen({ zoomRegion = null, screenRegion = null, updateCapture = true } = {}) {
+	const display = pickDisplay(screenRegion)
 	const scale = display.scaleFactor || 1
 	const fullWidth = Math.max(1, Math.round(display.size.width * scale))
 	const fullHeight = Math.max(1, Math.round(display.size.height * scale))
@@ -519,19 +540,33 @@ async function captureScreen({ region = null } = {}) {
 	const matching = sources.find((source) => String(source.display_id) === String(display.id)) ?? sources[0]
 	if (matching == null || matching.thumbnail.isEmpty()) throw new Error('Windows did not return a screenshot')
 	let image = matching.thumbnail
-	if (region != null) {
-		const crop = {
-			x: Math.max(0, Math.round(region[0])),
-			y: Math.max(0, Math.round(region[1])),
-			width: Math.max(1, Math.round(region[2] - region[0])),
-			height: Math.max(1, Math.round(region[3] - region[1])),
-		}
-		image = image.crop(crop)
+	let logicalBounds = { ...display.bounds }
+	if (screenRegion != null) {
+		const fullSize = image.getSize()
+		const scaleX = fullSize.width / display.bounds.width
+		const scaleY = fullSize.height / display.bounds.height
+		image = cropImage(image, {
+			x: (screenRegion[0] - display.bounds.x) * scaleX,
+			y: (screenRegion[1] - display.bounds.y) * scaleY,
+			width: screenRegion[2] * scaleX,
+			height: screenRegion[3] * scaleY,
+		})
+		logicalBounds = { x: screenRegion[0], y: screenRegion[1], width: screenRegion[2], height: screenRegion[3] }
+	}
+	if (zoomRegion != null) {
+		image = cropImage(image, {
+			x: zoomRegion[0],
+			y: zoomRegion[1],
+			width: zoomRegion[2] - zoomRegion[0],
+			height: zoomRegion[3] - zoomRegion[1],
+		})
 	}
 	const file = path.join(os.tmpdir(), `bol-screen-${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`)
 	await fs.writeFile(file, image.toJPEG(84))
 	const size = image.getSize()
-	lastCapture = { bounds: display.bounds, width: size.width, height: size.height, displayId: String(display.id) }
+	if (updateCapture) {
+		lastCapture = { bounds: logicalBounds, width: size.width, height: size.height, displayId: String(display.id) }
+	}
 	return {
 		file,
 		text: `Screenshot of ${display.label || 'the primary display'} (${size.width}x${size.height}).`,
@@ -542,7 +577,9 @@ async function captureScreen({ region = null } = {}) {
 async function performControlAction(action) {
 	switch (action.name) {
 		case 'screenshot': {
-			const result = await captureScreen()
+			const result = await captureScreen({
+				screenRegion: Array.isArray(action.screenRegion) ? action.screenRegion : null,
+			})
 			const other = displayChoices()
 				.filter((display) => display.id !== String(result.display.id))
 				.map((display) => `${display.label} (${display.id})`)
@@ -552,7 +589,7 @@ async function performControlAction(action) {
 			}
 		}
 		case 'zoom': {
-			const result = await captureScreen({ region: action.region })
+			const result = await captureScreen({ zoomRegion: action.region, updateCapture: false })
 			return { text: 'Zoomed screenshot.', images: [result.file] }
 		}
 		case 'left_click':
