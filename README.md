@@ -27,7 +27,7 @@ Build it on Windows with Bun and PowerShell:
 The `Windows build` workflow produces the installer as a build artifact on Windows runners.
 
 The Windows port is newer than the Mac app. It does not yet include the full onboarding flow, Threads window,
-MCP settings UI or automatic updates. Voice input needs an OpenAI API key in Settings;
+system-wide dictation, MCP settings UI or automatic updates. Voice input needs an OpenAI API key in Settings;
 Claude itself still uses the signed-in Claude Code subscription. Builds are unsigned unless electron-builder is
 configured with a Windows code-signing certificate.
 
